@@ -80,11 +80,14 @@ func (vm *VM) Run() error {
             return nil
         case OP_CONST:
             i := vm.fetchByte()
-            vm.stackPush(vm.constants[i])
+            e := vm.stackPush(vm.constants[i])
+            if e != nil { return e }
         case OP_IADD, OP_ISUB, OP_IMUL, OP_IDIV, OP_IREM:
-            vm.execIntBinop(op)
+            e := vm.execIntBinop(op)
+            if e != nil { return e }
         case OP_EQ, OP_LT, OP_LE:
-            vm.execConditon(op)
+            e := vm.execConditon(op)
+            if e != nil { return e }
         case OP_ARRAY:
             // elems already on stack
             nelems := int(vm.fetch2Bytes())
@@ -92,11 +95,13 @@ func (vm *VM) Run() error {
             for i := 0; i < nelems; i++ {
                 arr[nelems-i-1] = vm.stackPop()
             }
-            vm.stackPush(ObjArr{arr})
+            e := vm.stackPush(ObjArr{arr})
+            if e != nil { return e }
         case OP_ARRID:
             i := int(vm.fetch2Bytes())
             arr := vm.stackTop().(ObjArr)
-            vm.stackPush(arr.Value[i])
+            e := vm.stackPush(arr.Value[i])
+            if e != nil { return e }
         case OP_JMP:
             vm.ip = int(vm.fetch2Bytes())
         case OP_JF:
@@ -107,14 +112,16 @@ func (vm *VM) Run() error {
             }
         case OP_LOAD:
             i := int(vm.fetchByte())
-            vm.stackPush(vm.stack[vm.frame.bp-vm.frame.argc+i])
+            e := vm.stackPush(vm.stack[vm.frame.bp-vm.frame.argc+i])
+            if e != nil { return e }
         case OP_STORE:
             o := vm.stackPop()
             i := int(vm.fetchByte())
             vm.stack[vm.frame.bp-vm.frame.argc+i] = o
         case OP_GLOAD:
             i := int(vm.fetchByte())
-            vm.stackPush(vm.globals[i])
+            e := vm.stackPush(vm.globals[i])
+            if e != nil { return e }
         case OP_GSTORE:
             o := vm.stackPop()
             i := int(vm.fetchByte())
@@ -133,7 +140,8 @@ func (vm *VM) Run() error {
             }
             vm.ip = vm.frame.ret
             vm.frame = vm.frame.caller
-            vm.stackPush(ret)
+            e := vm.stackPush(ret)
+            if e != nil { return e }
         case OP_PRINT:
             v := vm.stackTop()
             fmt.Println(v)
@@ -144,7 +152,7 @@ func (vm *VM) Run() error {
     return nil
 }
 
-func (vm *VM) execIntBinop(op OpCode) {
+func (vm *VM) execIntBinop(op OpCode) error {
     var res ObjInt
     op2, op1 := vm.stackPop().(ObjInt), vm.stackPop().(ObjInt)
     switch (op) {
@@ -154,10 +162,11 @@ func (vm *VM) execIntBinop(op OpCode) {
     case OP_IDIV: res = ObjInt{op1.Value / op2.Value}
     case OP_IREM: res = ObjInt{op1.Value % op2.Value}
     }
-    vm.stackPush(res)
+    e := vm.stackPush(res)
+    return e
 }
 
-func (vm *VM) execConditon(op OpCode) {
+func (vm *VM) execConditon(op OpCode) error {
     var res ObjBool
     op2, op1 := vm.stackPop().(ObjInt), vm.stackPop().(ObjInt)
     switch (op) {
@@ -165,13 +174,14 @@ func (vm *VM) execConditon(op OpCode) {
     case OP_LT: res = ObjBool{op1.Value < op2.Value}
     case OP_LE: res = ObjBool{op1.Value <= op2.Value}
     }
-    vm.stackPush(res)
+    e := vm.stackPush(res)
+    return e
 }
 
 func falsey(o Object) bool {
     switch o.Type() {
     case ObjIntType: if o.(ObjInt).Value == 0 { return true }
-    case ObjArrType: if o.(ObjArr).Value == nil { return true }
+    case ObjArrType: if o.(ObjArr).Value != nil { return true }
     case ObjBoolType: if o.(ObjBool).Value == false { return true }
     }
     return false
